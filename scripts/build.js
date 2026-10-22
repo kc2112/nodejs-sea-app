@@ -3,13 +3,13 @@
 
 /**
  * Build script for Node.js Single Executable Application (SEA)
- * with Puppeteer + bundled Chrome.
+ * with Puppeteer + bundled chrome-headless-shell.
  *
  * Steps:
  * 1. Bundle src/cli.js (and puppeteer) into a single CommonJS file with esbuild
  * 2. Generate SEA preparation blob from the bundle
  * 3. Copy Node binary and inject the blob with postject
- * 4. Copy Puppeteer Chrome cache into dist/chrome/ (for distribution)
+ * 4. Unzip vendored chrome-headless-shell into dist/chrome/ (for distribution)
  */
 
 const { execSync } = require('node:child_process');
@@ -48,19 +48,19 @@ async function resolveNodeExecutable(target) {
   }
 
   const binName = target === 'windows' ? 'node.exe' : 'node';
-  const nodeDir = path.join(ROOT, 'vendor', 'node');
+  const binDir = path.join(ROOT, 'bin');
 
-  if (!fs.existsSync(nodeDir)) {
-    console.error(`vendor/node/ not found: ${nodeDir}`);
+  if (!fs.existsSync(binDir)) {
+    console.error(`bin/ not found: ${binDir}`);
     return null;
   }
 
-  console.log(`Looking for Node archive in: ${nodeDir}`);
-  const files = fs.readdirSync(nodeDir);
+  console.log(`Looking for Node archive in: ${binDir}`);
+  const files = fs.readdirSync(binDir);
   console.log(`Contents: ${files.join(', ')}`);
-  const direct = path.join(nodeDir, binName);
+  const direct = path.join(binDir, binName);
   if (fs.existsSync(direct)) return direct;
-  const inBin = path.join(nodeDir, 'bin', binName);
+  const inBin = path.join(binDir, 'bin', binName);
   if (fs.existsSync(inBin)) return inBin;
 
   // 2. Look for any archive matching the target
@@ -68,20 +68,21 @@ async function resolveNodeExecutable(target) {
     const lower = f.toLowerCase();
     if (target === 'linux') {
       return (lower.includes('linux') || lower.includes('linux-x64')) &&
-             (lower.endsWith('.tar.xz') || lower.endsWith('.tar.gz') || lower.endsWith('.tgz'));
+             (lower.endsWith('.tar.gz') || lower.endsWith('.tgz') || lower.endsWith('.tar')) &&
+             !lower.endsWith('.tar.xz');
     }
     return (lower.includes('win') || lower.includes('win-x64')) &&
            (lower.endsWith('.zip') || lower.endsWith('.tar.gz'));
   });
 
   if (!archive) {
-    console.error('No matching Node archive found in vendor/node/');
+    console.error('No matching Node archive found in bin/');
     return null;
   }
   console.log(`Found archive: ${archive}`);
 
-  const zipPath = path.join(nodeDir, archive);
-  const extractedDir = path.join(nodeDir, `extracted-${target}`);
+  const zipPath = path.join(binDir, archive);
+  const extractedDir = path.join(binDir, `extracted-${target}`);
 
   // Always re-extract if the binary isn't already present
   function findBinary(dir, depth = 0) {
@@ -110,7 +111,17 @@ async function resolveNodeExecutable(target) {
     }
     fs.mkdirSync(extractedDir, { recursive: true });
 
-    const isTar = /\.(tar\.xz|tar\.gz|tgz|tar)$/i.test(zipPath);
+    const isTarXz = /\.tar\.xz$/i.test(zipPath);
+    const isTar = /\.(tar\.gz|tgz|tar)$/i.test(zipPath);
+
+    if (isTarXz) {
+      console.error('\n.tar.xz is not supported by the pure-Node extractor.');
+      console.error('Download the .tar.gz version instead:');
+      console.error('  https://nodejs.org/dist/v24.13.1/node-v24.13.1-linux-x64.tar.gz');
+      console.error('Place it in bin/ and delete the .tar.xz file.');
+      process.exit(1);
+    }
+
     if (isTar) {
       let tar;
       try { tar = require('tar'); }
@@ -170,8 +181,8 @@ async function main() {
   if (isCrossCompile && !NODE_EXECUTABLE) {
     console.error('\nCross-compile detected but no Node binary found for the target.');
     console.error('Either:');
-    console.error('  1. Place a Node archive in vendor/node/ (e.g. node-linux-x64.tar.xz)');
-    console.error('     If extraction fails, extract it manually into vendor/node/extracted-linux/ and re-run.');
+    console.error('  1. Place a Node archive in bin/ (e.g. node-v24.13.1-linux-x64.tar.gz)');
+    console.error('     If extraction fails, extract it manually into bin/extracted-linux/ and re-run.');
     console.error('  2. Or set SEA_NODE_EXECUTABLE to an extracted node binary.');
     process.exit(1);
   }
@@ -272,12 +283,12 @@ async function main() {
     }
   }
 
-  // 6. Unzip vendored Chrome for the target platform
-  console.log('Preparing vendored Chrome...');
+  // 6. Unzip vendored chrome-headless-shell for the target platform
+  console.log('Preparing vendored chrome-headless-shell...');
   try {
     run(`node scripts/prepare-chrome.js --target ${target}`);
   } catch (err) {
-    console.warn('Chrome preparation failed. Ensure the correct zip exists in vendor/.');
+    console.warn('Chrome preparation failed. Ensure the correct zip exists in bin/.');
   }
 
   console.log('\n✅ Build complete!');
@@ -286,7 +297,7 @@ async function main() {
   console.log(`Size: ${(fs.statSync(OUTPUT).size / 1024 / 1024).toFixed(1)} MB`);
   console.log('\nDistribution package should contain:');
   console.log(`  ${binaryName}`);
-  console.log('  chrome/   (full Chrome for Testing tree)');
+  console.log('  chrome/   (chrome-headless-shell tree)');
   console.log('\nTest:');
   console.log(`  ${OUTPUT} --version`);
   console.log(`  ${OUTPUT} pdf sample.pdf`);
