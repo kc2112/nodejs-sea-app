@@ -117,7 +117,7 @@ async function resolveNodeExecutable(target) {
     if (isTarXz) {
       console.error('\n.tar.xz is not supported by the pure-Node extractor.');
       console.error('Download the .tar.gz version instead:');
-      console.error('  https://nodejs.org/dist/v24.13.1/node-v24.13.1-linux-x64.tar.gz');
+      console.error('  https://nodejs.org/dist/v24.16.0/node-v24.16.0-linux-x64.tar.gz');
       console.error('Place it in bin/ and delete the .tar.xz file.');
       process.exit(1);
     }
