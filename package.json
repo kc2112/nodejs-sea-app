@@ -1,0 +1,30 @@
+{
+  "name": "myBinary",
+  "version": "1.0.0",
+  "description": "Node.js SEA binary with Puppeteer + bundled Chrome for PDF rendering",
+  "main": "src/cli.js",
+  "bin": {
+    "myBinary": "./dist/myBinary"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "build:windows": "node scripts/build.js --target windows",
+    "build:linux": "node scripts/build.js --target linux",
+    "build:blob": "node --experimental-sea-config sea-config.json",
+    "start": "node src/cli.js",
+    "postinstall": "node scripts/prepare-chrome.js || true"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer-core": "^24.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "postject": "^1.0.0-alpha.6",
+    "tar": "^7.4.3"
+  },
+  "keywords": ["cli", "sea", "puppeteer", "pdf", "chrome"]
+}

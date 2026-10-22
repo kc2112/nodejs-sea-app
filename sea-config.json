@@ -1,0 +1,9 @@
+{
+  "main": "dist/bundle.js",
+  "output": "dist/sea-prep.blob",
+  "disableExperimentalSEAWarning": true,
+  "useCodeCache": true,
+  "assets": {
+    "greeting.txt": "assets/greeting.txt"
+  }
+}

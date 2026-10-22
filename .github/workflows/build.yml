@@ -1,0 +1,84 @@
+name: Build SEA binary with bundled Chrome
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # Cache Puppeteer's Chrome download (~/.cache/puppeteer)
+      # This avoids re-downloading ~150-300MB of Chrome on every CI run.
+      - name: Cache Puppeteer browsers
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/puppeteer
+          key: puppeteer-chrome-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            puppeteer-chrome-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Explicitly ensure Chrome is present (puppeteer postinstall usually does this)
+      - name: Install Chrome for Puppeteer
+        run: npx puppeteer browsers install chrome
+        env:
+          PUPPETEER_CACHE_DIR: ${{ github.workspace }}/.cache/puppeteer
+
+      # Optional: also cache the project-local copy if you use a custom cache dir
+      - name: Cache project Chrome (optional)
+        uses: actions/cache@v4
+        with:
+          path: .cache/puppeteer
+          key: puppeteer-local-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            puppeteer-local-${{ runner.os }}-
+
+      - name: Build SEA binary + bundle Chrome
+        run: npm run build
+        env:
+          PUPPETEER_CACHE_DIR: ${{ github.workspace }}/.cache/puppeteer
+
+      - name: Verify binary and Chrome layout
+        run: |
+          ls -la dist/
+          test -f dist/myBinary
+          test -d dist/chrome || echo "Warning: chrome/ folder missing"
+          file dist/myBinary || true
+
+      - name: Upload distribution artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: myBinary-linux-x64
+          path: |
+            dist/myBinary
+            dist/chrome/
+          retention-days: 30
+
+      # Optional: also produce a tarball for easier distribution
+      - name: Create distribution tarball
+        run: |
+          cd dist
+          tar -czf ../myBinary-linux-x64.tar.gz myBinary chrome/
+        if: always()
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: myBinary-linux-x64-tar
+          path: myBinary-linux-x64.tar.gz
+          retention-days: 30

@@ -1,0 +1,6 @@
+Welcome to the Node.js SEA CLI!
+
+This text was embedded into the binary via the "assets" field
+in sea-config.json and retrieved at runtime with node:sea.getAsset().
+
+No external files are required at runtime.
