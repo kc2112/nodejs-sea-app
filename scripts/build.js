@@ -55,36 +55,22 @@ async function resolveNodeExecutable(target) {
     return null;
   }
 
-  console.log(`Looking for Node archive in: ${binDir}`);
+  console.log(`Looking for Node binary in: ${binDir}`);
   const files = fs.readdirSync(binDir);
-  console.log(`Contents: ${files.join(', ')}`);
-  const direct = path.join(binDir, binName);
-  if (fs.existsSync(direct)) return direct;
-  const inBin = path.join(binDir, 'bin', binName);
-  if (fs.existsSync(inBin)) return inBin;
 
-  // 2. Look for any archive matching the target
-  const archive = files.find((f) => {
-    const lower = f.toLowerCase();
-    if (target === 'linux') {
-      return (lower.includes('linux') || lower.includes('linux-x64')) &&
-             (lower.endsWith('.tar.gz') || lower.endsWith('.tgz') || lower.endsWith('.tar')) &&
-             !lower.endsWith('.tar.xz');
+  // Prefer a standalone binary named like node-v*-linux-x64 (no extension)
+  if (target === 'linux') {
+    const standalone = files.find((f) => /^node-v[\d.]+-linux(-x64)?$/i.test(f));
+    if (standalone) {
+      const p = path.join(binDir, standalone);
+      if (fs.statSync(p).isFile()) {
+        console.log(`Using Node binary: ${p}`);
+        return p;
+      }
     }
-    return (lower.includes('win') || lower.includes('win-x64')) &&
-           (lower.endsWith('.zip') || lower.endsWith('.tar.gz'));
-  });
-
-  if (!archive) {
-    console.error('No matching Node archive found in bin/');
-    return null;
   }
-  console.log(`Found archive: ${archive}`);
 
-  const zipPath = path.join(binDir, archive);
-  const extractedDir = path.join(binDir, `extracted-${target}`);
-
-  // Always re-extract if the binary isn't already present
+  // Fallback: walk for a file named node / node.exe
   function findBinary(dir, depth = 0) {
     if (depth > 4 || !fs.existsSync(dir)) return null;
     try {
@@ -99,65 +85,18 @@ async function resolveNodeExecutable(target) {
           if (found) return found;
         }
       }
-    } catch { /* ignore permission/read errors */ }
+    } catch { /* ignore */ }
     return null;
   }
 
-  let found = findBinary(extractedDir);
-  if (!found) {
-    console.log(`Extracting ${archive}...`);
-    if (fs.existsSync(extractedDir)) {
-      fs.rmSync(extractedDir, { recursive: true, force: true });
-    }
-    fs.mkdirSync(extractedDir, { recursive: true });
-
-    const isTarXz = /\.tar\.xz$/i.test(zipPath);
-    const isTar = /\.(tar\.gz|tgz|tar)$/i.test(zipPath);
-
-    if (isTarXz) {
-      console.error('\n.tar.xz is not supported by the pure-Node extractor.');
-      console.error('Download the .tar.gz version instead:');
-      console.error('  https://nodejs.org/dist/v24.16.0/node-v24.16.0-linux-x64.tar.gz');
-      console.error('Place it in bin/ and delete the .tar.xz file.');
-      process.exit(1);
-    }
-
-    if (isTar) {
-      let tar;
-      try { tar = require('tar'); }
-      catch {
-        console.error('The "tar" package is required. Run: npm install');
-        process.exit(1);
-      }
-      await tar.x({ file: zipPath, cwd: extractedDir });
-    } else {
-      execSync(`powershell -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractedDir}' -Force"`, { stdio: 'inherit' });
-    }
-
-    // Debug: show what was extracted
-    console.log('Extracted contents:');
-    const show = (d, indent = '') => {
-      try {
-        for (const e of fs.readdirSync(d).slice(0, 20)) {
-          const p = path.join(d, e);
-          const isDir = fs.statSync(p).isDirectory();
-          console.log(`${indent}${e}${isDir ? '/' : ''}`);
-          if (isDir && indent.length < 4) show(p, indent + '  ');
-        }
-      } catch {}
-    };
-    show(extractedDir);
-
-    found = findBinary(extractedDir);
-  }
-
+  const found = findBinary(binDir);
   if (found) {
     console.log(`Using Node binary: ${found}`);
     return found;
   }
 
-  console.error('Could not locate the node binary after extraction.');
-  console.error(`Searched under: ${extractedDir}`);
+  console.error(`No Node binary found under bin/`);
+  console.error('Expected a file like bin/node-v24.16.0-linux-x64 (standalone) or bin/node');
   return null;
 }
 
@@ -187,9 +126,9 @@ async function main() {
   if (isCrossCompile && !NODE_EXECUTABLE) {
     console.error('\nCross-compile detected but no Node binary found for the target.');
     console.error('Either:');
-    console.error('  1. Place a Node archive in bin/ (e.g. node-v24.13.1-linux-x64.tar.gz)');
-    console.error('     If extraction fails, extract it manually into bin/extracted-linux/ and re-run.');
-    console.error('  2. Or set SEA_NODE_EXECUTABLE to an extracted node binary.');
+    console.error('  1. Place a standalone Node binary in bin/');
+    console.error('     (e.g. bin/node-v24.16.0-linux-x64)');
+    console.error('  2. Or set SEA_NODE_EXECUTABLE to the node binary path.');
     process.exit(1);
   }
 
@@ -297,13 +236,7 @@ async function main() {
     console.warn('Chrome preparation failed. Ensure the correct zip exists in bin/.');
   }
 
-  // 7. Clean up extracted Node archive
-  const extractedDir = path.join(ROOT, 'bin', `extracted-${target}`);
-  if (fs.existsSync(extractedDir)) {
-    console.log(`Removing ${extractedDir}...`);
-    fs.rmSync(extractedDir, { recursive: true, force: true });
-  }
-
+  // 7. Done
   console.log('\n✅ Build complete!');
   console.log(`Binary: ${OUTPUT}`);
   console.log(`Chrome: ${path.join(DIST, 'chrome')} (if present)`);
