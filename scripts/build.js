@@ -167,6 +167,12 @@ function run(cmd, opts = {}) {
 }
 
 async function main() {
+  // Clean dist/ before building
+  if (fs.existsSync(DIST)) {
+    console.log('Cleaning dist/...');
+    fs.rmSync(DIST, { recursive: true, force: true });
+  }
+
   const NODE_EXECUTABLE = await resolveNodeExecutable(target);
 
   fs.mkdirSync(DIST, { recursive: true });
@@ -289,6 +295,13 @@ async function main() {
     run(`node scripts/prepare-chrome.js --target ${target}`);
   } catch (err) {
     console.warn('Chrome preparation failed. Ensure the correct zip exists in bin/.');
+  }
+
+  // 7. Clean up extracted Node archive
+  const extractedDir = path.join(ROOT, 'bin', `extracted-${target}`);
+  if (fs.existsSync(extractedDir)) {
+    console.log(`Removing ${extractedDir}...`);
+    fs.rmSync(extractedDir, { recursive: true, force: true });
   }
 
   console.log('\n✅ Build complete!');
